@@ -5,6 +5,7 @@ import Translation
 struct AddCardView: View {
     let language: Language
     var prefillWord: String? = nil
+    var prefillForeignWord: String? = nil
     var source: CardSource = .manual
     var sourceThumbnailData: Data? = nil
     var onSaved: (() -> Void)? = nil
@@ -91,7 +92,12 @@ struct AddCardView: View {
                 }
             }
             .onAppear {
-                if let word = prefillWord, englishWord.isEmpty {
+                if let foreignPrefill = prefillForeignWord, !foreignPrefill.isEmpty {
+                    foreignWord = foreignPrefill
+                    if let engPrefill = prefillWord, !engPrefill.isEmpty {
+                        englishWord = engPrefill
+                    }
+                } else if let word = prefillWord, englishWord.isEmpty {
                     englishWord = word
                     triggerTranslation()
                 }

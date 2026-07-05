@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import PhotosUI
+import Translation
 
 struct CameraView: View {
     let language: Language
@@ -16,7 +17,10 @@ struct CameraView: View {
     @State private var curatedWords: [String] = []
     @State private var selectedWords: Set<String> = []
     @State private var objectCandidates: [ObjectCandidate] = []
-    @State private var objectWord: String = ""
+    @State private var objectEnglishLabel: String = ""
+    @State private var objectForeignLabel: String = ""
+    @State private var objectTranslations: [String: String] = [:]
+    @State private var objectTranslationConfig: TranslationSession.Configuration?
     @State private var manualWord: String = ""
     @State private var selectedImage: UIImage?
     @State private var errorMessage: String?
@@ -80,7 +84,8 @@ struct CameraView: View {
             .sheet(isPresented: $showAddCardForObject) {
                 AddCardView(
                     language: language,
-                    prefillWord: objectWord,
+                    prefillWord: objectEnglishLabel.isEmpty ? nil : objectEnglishLabel,
+                    prefillForeignWord: objectForeignLabel.isEmpty ? nil : objectForeignLabel,
                     source: .camera,
                     sourceThumbnailData: selectedImage.flatMap { resize($0, to: CGSize(width: 80, height: 80)) }?.jpegData(compressionQuality: 0.7),
                     onSaved: { dismiss() }
@@ -92,6 +97,17 @@ struct CameraView: View {
                     Task { await processImage(image) }
                 }
                 .ignoresSafeArea()
+            }
+            .translationTask(objectTranslationConfig) { session in
+                let requests = objectCandidates.map { TranslationSession.Request(sourceText: $0.label) }
+                guard let responses = try? await session.translations(from: requests) else { return }
+                for (candidate, response) in zip(objectCandidates, responses) {
+                    objectTranslations[candidate.label] = response.targetText
+                }
+                if let first = objectCandidates.first {
+                    objectEnglishLabel = first.label
+                    objectForeignLabel = objectTranslations[first.label] ?? first.label
+                }
             }
         }
     }
@@ -253,15 +269,26 @@ struct CameraView: View {
 
             VStack(spacing: 0) {
                 ForEach(objectCandidates, id: \.label) { candidate in
+                    let translated = objectTranslations[candidate.label]
+                    let displayLabel = translated ?? candidate.label
+                    let isSelected = objectEnglishLabel == candidate.label
                     Button {
-                        objectWord = candidate.label
+                        objectEnglishLabel = candidate.label
+                        objectForeignLabel = objectTranslations[candidate.label] ?? candidate.label
                     } label: {
                         HStack {
-                            Image(systemName: objectWord == candidate.label ? "largecircle.fill.circle" : "circle")
-                                .foregroundStyle(objectWord == candidate.label ? Color.accentColor : Color.secondary)
-                            Text(candidate.label)
-                                .font(.body)
-                                .foregroundStyle(.primary)
+                            Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(displayLabel)
+                                    .font(.body)
+                                    .foregroundStyle(.primary)
+                                if translated != nil {
+                                    Text(candidate.label)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                             Spacer()
                             Text("\(Int(candidate.confidence * 100))%")
                                 .font(.caption)
@@ -283,7 +310,7 @@ struct CameraView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
-                TextField("Object name", text: $objectWord)
+                TextField("Word in \(language.displayName)", text: $objectForeignLabel)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
                     .padding(.horizontal)
@@ -292,13 +319,13 @@ struct CameraView: View {
             Button {
                 showAddCardForObject = true
             } label: {
-                Text(objectWord.isEmpty ? "Add to deck" : "Add \"\(objectWord)\" to deck")
+                Text(objectForeignLabel.isEmpty ? "Add to deck" : "Add \"\(objectForeignLabel)\" to deck")
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(objectWord.trimmingCharacters(in: .whitespaces).isEmpty)
+            .disabled(objectForeignLabel.trimmingCharacters(in: .whitespaces).isEmpty)
             .padding(.horizontal)
         }
         .padding(.top)
@@ -321,7 +348,9 @@ struct CameraView: View {
         curatedWords = []
         selectedWords = []
         objectCandidates = []
-        objectWord = ""
+        objectEnglishLabel = ""
+        objectForeignLabel = ""
+        objectTranslations = [:]
         selectedImage = image
 
         defer { isProcessing = false }
@@ -338,7 +367,14 @@ struct CameraView: View {
             case .object:
                 let candidates = try await OCRService.classifyObject(in: image)
                 objectCandidates = candidates
-                objectWord = candidates.first?.label ?? ""
+                objectEnglishLabel = candidates.first?.label ?? ""
+                if !candidates.isEmpty {
+                    objectTranslationConfig = TranslationSession.Configuration(
+                        source: Locale.Language(identifier: "en"),
+                        target: Locale.Language(identifier: language.code)
+                    )
+                    objectTranslationConfig?.invalidate()
+                }
             }
         } catch {
             errorMessage = error.localizedDescription
