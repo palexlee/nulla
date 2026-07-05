@@ -1,11 +1,5 @@
-//
-//  NullaApp.swift
-//  Nulla
-//
-//  Created by Pierre-Alexandre Lee on 13.06.2026.
-//
-
 import SwiftUI
+import SwiftData
 
 @main
 struct NullaApp: App {
@@ -13,5 +7,6 @@ struct NullaApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: [Language.self, FlashCard.self])
     }
 }
