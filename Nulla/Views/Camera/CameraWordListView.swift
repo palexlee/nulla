@@ -24,26 +24,33 @@ struct CameraWordListView: View {
     @State private var isSaving = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    ForEach($drafts) { $draft in
-                        CardDraftRow(draft: $draft, language: language)
+        ZStack {
+            Theme.paper.ignoresSafeArea()
+            VStack(spacing: 0) {
+                topBar
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
+                    .padding(.bottom, 6)
+
+                Text("\(drafts.count) word\(drafts.count == 1 ? "" : "s") · translations auto-filled")
+                    .manrope(12, .semibold).foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
+
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach($drafts) { $draft in
+                            DraftCardView(draft: $draft, language: language)
+                        }
                     }
-                } header: {
-                    Text("\(drafts.count) word\(drafts.count == 1 ? "" : "s") to add")
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
                 }
-            }
-            .navigationTitle("Review Cards")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save all") { saveAll() }
-                        .disabled(isSaving || drafts.isEmpty)
-                }
+
+                addButton
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 16)
             }
         }
         .onAppear {
@@ -58,6 +65,41 @@ struct CameraWordListView: View {
                 drafts[index].translation = response.targetText
             }
         }
+    }
+
+    private var topBar: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Text("‹ Back").manrope(13, .semibold).foregroundStyle(Theme.muted)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            Text("Review cards")
+                .manrope(15, .heavy).foregroundStyle(Theme.ink)
+            Spacer()
+            Button { saveAll() } label: {
+                Text("Save all").manrope(13, .bold).foregroundStyle(Theme.green)
+            }
+            .buttonStyle(.plain)
+            .disabled(isSaving || drafts.isEmpty)
+        }
+    }
+
+    private var addButton: some View {
+        let count = drafts.count
+        return Button { saveAll() } label: {
+            Text("Add \(count) card\(count == 1 ? "" : "s") to deck")
+                .manrope(14, .bold)
+                .foregroundStyle(drafts.isEmpty ? Theme.muted : Theme.onGreen)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    drafts.isEmpty ? Theme.surface : Theme.green,
+                    in: RoundedRectangle(cornerRadius: Theme.rPill)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(isSaving || drafts.isEmpty)
     }
 
     private func triggerTranslation() {
@@ -87,53 +129,69 @@ struct CameraWordListView: View {
     }
 }
 
-struct CardDraftRow: View {
+struct DraftCardView: View {
     @Binding var draft: CardDraft
     let language: Language
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             Text(draft.word)
-                .font(.headline)
+                .manrope(20, .heavy).foregroundStyle(Theme.ink)
+                .padding(.bottom, 11)
+
+            Rectangle()
+                .fill(Theme.surface2)
+                .frame(height: 1)
+                .padding(.bottom, 11)
 
             if draft.translation.isEmpty {
                 HStack(spacing: 6) {
                     ProgressView().scaleEffect(0.75)
                     Text("Translating…")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .manrope(14, .semibold).foregroundStyle(Theme.faint)
                 }
+                .padding(.bottom, 8)
             } else {
-                TextField("Translation", text: $draft.translation)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(draft.translation)
+                    .manrope(14, .semibold).foregroundStyle(Theme.faint)
+                    .padding(.bottom, draft.exampleSentence.isEmpty ? 0 : 11)
             }
 
             if draft.exampleSentence.isEmpty {
-                Button {
-                    Task { await generateSentence() }
-                } label: {
-                    if draft.isGeneratingSentence {
-                        HStack(spacing: 6) {
-                            ProgressView().scaleEffect(0.7)
-                            Text("Generating…").foregroundStyle(.secondary)
-                        }
-                        .font(.caption)
-                    } else {
-                        Label("Generate example sentence", systemImage: "sparkles")
-                            .font(.caption)
-                    }
-                }
-                .disabled(draft.isGeneratingSentence)
+                generateButton
+                    .padding(.top, draft.translation.isEmpty ? 8 : 0)
             } else {
-                TextField("Example sentence", text: $draft.exampleSentence, axis: .vertical)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .italic()
-                    .lineLimit(2, reservesSpace: false)
+                Text(draft.exampleSentence)
+                    .manrope(13.5, .medium).italic().foregroundStyle(Theme.faint)
+                    .lineLimit(3)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 17).padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.rCard))
+        .shadow(color: .black.opacity(0.04), radius: 9, y: 3)
+    }
+
+    private var generateButton: some View {
+        Button {
+            Task { await generateSentence() }
+        } label: {
+            Group {
+                if draft.isGeneratingSentence {
+                    HStack(spacing: 6) {
+                        ProgressView().scaleEffect(0.75)
+                        Text("Generating…").manrope(12.5, .semibold).foregroundStyle(Theme.onLav)
+                    }
+                } else {
+                    Text("✨ Generate example")
+                        .manrope(12.5, .bold).foregroundStyle(Theme.onLav)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(Theme.lavender, in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .disabled(draft.isGeneratingSentence)
     }
 
     private func generateSentence() async {

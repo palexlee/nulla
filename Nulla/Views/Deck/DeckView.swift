@@ -6,8 +6,8 @@ struct DeckView: View {
     @Environment(\.modelContext) private var context
 
     @State private var searchText = ""
-    @State private var showAddCard = false
     @State private var showCamera = false
+    @State private var showLanguagePicker = false
     @State private var sourceFilter: CardSource? = nil
     @State private var editingCard: FlashCard? = nil
 
@@ -23,83 +23,114 @@ struct DeckView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if language.cards.isEmpty {
-                    emptyDeckView
-                } else {
-                    cardList
+        ZStack {
+            Theme.paper.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                        .padding(.horizontal, 24)
+                        .padding(.top, 20)
+                        .padding(.bottom, 16)
+
+                    searchBar
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 14)
+
+                    filterChips
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 6)
+
+                    cardListContent
                 }
+                .padding(.bottom, 100)
             }
-            .background(Theme.paper.ignoresSafeArea())
-            .navigationTitle("\(language.flag) \(language.displayName)")
-            .searchable(text: $searchText, prompt: "Search cards")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button {
-                            showAddCard = true
-                        } label: {
-                            Label("Add manually", systemImage: "plus.circle")
-                        }
-                        Button {
-                            showCamera = true
-                        } label: {
-                            Label("Scan with camera", systemImage: "camera")
-                        }
-                    } label: {
-                        Image(systemName: "plus")
+        }
+        .sheet(isPresented: $showCamera) {
+            CameraView(language: language)
+        }
+        .sheet(item: $editingCard) { card in
+            CardEditorView(cardModel: card, language: language)
+        }
+        .sheet(isPresented: $showLanguagePicker) {
+            LanguageSwitcherSheet()
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Button { showLanguagePicker = true } label: {
+                    HStack(spacing: 4) {
+                        Text("\(language.flag) \(language.displayName) · \(language.level.label)")
+                            .manrope(12, .semibold).foregroundStyle(Theme.muted)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9)).foregroundStyle(Theme.muted)
                     }
                 }
-                ToolbarItem(placement: .secondaryAction) {
-                    Menu {
-                        Button("All") { sourceFilter = nil }
-                        ForEach(CardSource.allCases, id: \.rawValue) { source in
-                            Button {
-                                sourceFilter = source
-                            } label: {
-                                Label(source.label, systemImage: source.icon)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: sourceFilter == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
-                    }
-                }
+                .buttonStyle(.plain)
+                Text("Your deck")
+                    .manrope(26, .heavy).foregroundStyle(Theme.ink)
             }
-            .sheet(isPresented: $showAddCard) {
-                AddCardView(language: language)
-            }
-            .sheet(isPresented: $showCamera) {
-                CameraView(language: language)
-            }
-            .sheet(item: $editingCard) { card in
-                CardEditorView(cardModel: card, language: language)
+            Spacer()
+            Button { showCamera = true } label: {
+                Text("+")
+                    .manrope(28, .medium).foregroundStyle(Theme.onGreen)
+                    .frame(width: 42, height: 42)
+                    .background(Theme.green, in: Circle())
             }
         }
     }
 
-    private var emptyDeckView: some View {
-        ContentUnavailableView {
-            Label("No cards yet", systemImage: "rectangle.stack.badge.plus")
-        } description: {
-            Text("Add your first card manually or scan text with your camera.")
-        } actions: {
-            Button("Add manually") { showAddCard = true }.buttonStyle(.borderedProminent)
-            Button("Scan with camera") { showCamera = true }.buttonStyle(.bordered)
+    private var searchBar: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.faint)
+            TextField("Search \(language.cards.count) cards", text: $searchText)
+                .manrope(13, .medium)
+                .foregroundStyle(Theme.ink)
+                .tint(Theme.green)
+                .autocorrectionDisabled()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.rTile))
+    }
+
+    private var filterChips: some View {
+        HStack(spacing: 8) {
+            filterChip("All", value: nil)
+            filterChip("Camera", value: .camera)
+            filterChip("Manual", value: .manual)
+            Spacer()
         }
     }
 
-    private var cardList: some View {
-        List {
-            Section {
+    private func filterChip(_ label: String, value: CardSource?) -> some View {
+        let active = sourceFilter == value
+        return Button { sourceFilter = value } label: {
+            Text(label)
+                .manrope(12, active ? .bold : .semibold)
+                .foregroundStyle(active ? Theme.onGreen : Theme.muted)
+                .padding(.horizontal, 15).padding(.vertical, 7)
+                .background(active ? Theme.green : Theme.surface, in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var cardListContent: some View {
+        if language.cards.isEmpty {
+            emptyState
+        } else {
+            LazyVStack(spacing: 0) {
                 ForEach(filteredCards) { card in
-                    CardRow(card: card, language: language)
-                        .listRowBackground(Theme.card)
+                    CardRow(card: card)
+                        .padding(.horizontal, 24)
+                        .contentShape(Rectangle())
                         .onTapGesture { editingCard = card }
                         .contextMenu {
-                            Button {
-                                editingCard = card
-                            } label: {
+                            Button { editingCard = card } label: {
                                 Label("Edit", systemImage: "pencil")
                             }
                             Button(role: .destructive) {
@@ -108,59 +139,90 @@ struct DeckView: View {
                                 Label("Delete", systemImage: "trash")
                             }
                         }
+                    Rectangle()
+                        .fill(Theme.surface2)
+                        .frame(height: 1)
+                        .padding(.leading, 24 + 44 + 12)
                 }
-            } header: {
-                Text("All Cards").manrope(12, .bold).foregroundStyle(Theme.muted)
             }
         }
-        .scrollContentBackground(.hidden)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Spacer().frame(height: 60)
+            Text("No cards here yet.")
+                .manrope(13.5, .semibold).foregroundStyle(Theme.muted)
+                .multilineTextAlignment(.center)
+            Text("Tap + to scan your first word.")
+                .manrope(13, .medium).foregroundStyle(Theme.faint)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 40)
     }
 }
 
 struct CardRow: View {
     let card: FlashCard
-    let language: Language
 
     var body: some View {
         HStack(spacing: 12) {
+            thumbnail
+            wordInfo
+            Spacer()
+            dueInfo
+        }
+        .padding(.vertical, 11)
+    }
+
+    private var thumbnail: some View {
+        Group {
             if let data = card.sourceThumbnailData, let image = UIImage(data: data) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
                     .frame(width: 44, height: 44)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
             } else {
-                Image(systemName: card.source.icon)
-                    .font(.title3)
+                Text(String(card.targetWord.prefix(1)))
+                    .manrope(17, .heavy)
                     .foregroundStyle(Theme.green)
                     .frame(width: 44, height: 44)
-                    .background(Theme.mint, in: RoundedRectangle(cornerRadius: 10))
+                    .background(Theme.mint, in: RoundedRectangle(cornerRadius: 12))
             }
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(card.targetWord).manrope(16, .bold).foregroundStyle(Theme.ink)
-                if !card.nativeTranslation.isEmpty {
-                    Text(card.nativeTranslation)
-                        .manrope(13, .medium)
-                        .foregroundStyle(Theme.muted)
+    private var wordInfo: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(card.targetWord)
+                    .manrope(15, .bold).foregroundStyle(Theme.ink)
+                if let p = card.pronunciation, !p.isEmpty {
+                    Text(p).manrope(11.5, .medium).foregroundStyle(Theme.muted)
                 }
             }
+            if !card.nativeTranslation.isEmpty {
+                Text(card.nativeTranslation)
+                    .manrope(12.5, .medium).foregroundStyle(Theme.muted)
+            }
+        }
+    }
 
-            Spacer()
-
+    private var dueInfo: some View {
+        Group {
             if card.isDueToday {
                 Text("DUE")
-                    .manrope(10.5, .bold)
+                    .manrope(9.5, .heavy)
                     .foregroundStyle(Theme.green)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Theme.mintChip, in: Capsule())
             } else {
                 Text(card.srsState.nextReview, style: .relative)
-                    .manrope(11, .medium)
+                    .manrope(11.5, .semibold)
                     .foregroundStyle(Theme.faint)
             }
         }
-        .padding(.vertical, 4)
     }
 }

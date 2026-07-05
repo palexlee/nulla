@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct ReviewView: View {
     let language: Language
@@ -237,6 +238,15 @@ private struct CardFace: View {
 
     private var back: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let data = card.sourceThumbnailData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 120, maxHeight: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.rCard))
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 16)
+            }
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(card.targetWord).manrope(28, .heavy)
                 if let p = card.pronunciation {

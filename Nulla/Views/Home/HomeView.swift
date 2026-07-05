@@ -15,6 +15,7 @@ struct HomeView: View {
 
     @State private var showReview = false
     @State private var showSettings = false
+    @State private var showLanguagePicker = false
 
     private var personality: Personality { Personality(rawValue: personalityRaw) ?? .full }
     private var copy: Copy { Copy(personality: personality) }
@@ -59,13 +60,16 @@ struct HomeView: View {
                         emptyState
                     }
                 }
-                .padding(20)
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 100)
             }
         }
         .fullScreenCover(isPresented: $showReview) {
             if let lang = selectedLanguage { ReviewView(language: lang) }
         }
         .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showLanguagePicker) { LanguageSwitcherSheet() }
     }
 
     // MARK: Header
@@ -75,13 +79,7 @@ struct HomeView: View {
             Text("nulla").manrope(21, .heavy).foregroundStyle(Theme.ink)
             Spacer()
             if let lang = selectedLanguage {
-                Menu {
-                    ForEach(languages) { l in
-                        Button { selectedLanguageCode = l.code } label: {
-                            Label("\(l.flag) \(l.displayName)", systemImage: l.code == selectedLanguageCode ? "checkmark" : "")
-                        }
-                    }
-                } label: {
+                Button { showLanguagePicker = true } label: {
                     HStack(spacing: 6) {
                         Text(lang.flag)
                         Text(lang.level.label).manrope(12.5, .bold)
@@ -91,6 +89,7 @@ struct HomeView: View {
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(Theme.surface, in: Capsule())
                 }
+                .buttonStyle(.plain)
             }
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape.fill").font(.system(size: 14)).foregroundStyle(Theme.muted)
