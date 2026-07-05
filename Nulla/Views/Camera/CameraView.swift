@@ -17,6 +17,7 @@ struct CameraView: View {
     @State private var curatedWords: [String] = []
     @State private var selectedWords: Set<String> = []
     @State private var objectCandidates: [ObjectCandidate] = []
+    @State private var objectSubjectImage: UIImage?
     @State private var objectEnglishLabel: String = ""
     @State private var objectForeignLabel: String = ""
     @State private var objectTranslations: [String: String] = [:]
@@ -87,7 +88,7 @@ struct CameraView: View {
                     prefillWord: objectEnglishLabel.isEmpty ? nil : objectEnglishLabel,
                     prefillForeignWord: objectForeignLabel.isEmpty ? nil : objectForeignLabel,
                     source: .camera,
-                    sourceThumbnailData: selectedImage.flatMap { resize($0, to: CGSize(width: 80, height: 80)) }?.jpegData(compressionQuality: 0.7),
+                    sourceThumbnailData: (objectSubjectImage ?? selectedImage).flatMap { resize($0, to: CGSize(width: 80, height: 80)) }?.jpegData(compressionQuality: 0.7),
                     onSaved: { dismiss() }
                 )
             }
@@ -348,6 +349,7 @@ struct CameraView: View {
         curatedWords = []
         selectedWords = []
         objectCandidates = []
+        objectSubjectImage = nil
         objectEnglishLabel = ""
         objectForeignLabel = ""
         objectTranslations = [:]
@@ -365,10 +367,11 @@ struct CameraView: View {
                 selectedWords = Set(curatedWords)
 
             case .object:
-                let candidates = try await OCRService.classifyObject(in: image)
-                objectCandidates = candidates
-                objectEnglishLabel = candidates.first?.label ?? ""
-                if !candidates.isEmpty {
+                let result = try await OCRService.classifyObject(in: image)
+                objectCandidates = result.candidates
+                objectSubjectImage = result.subjectImage
+                objectEnglishLabel = result.candidates.first?.label ?? ""
+                if !result.candidates.isEmpty {
                     objectTranslationConfig = TranslationSession.Configuration(
                         source: Locale.Language(identifier: "en"),
                         target: Locale.Language(identifier: language.code)
